@@ -1,46 +1,38 @@
-import os
+import pickle
+from flask import Flask, request, render_template_string, make_response
+from twilio.rest import Client
 
-class MessageWriter:
-    def __init__(self, file_path="messages.txt"):
-        self.file_path = file_path
+app = Flask(__name__)
 
-    def send_message(self, message):
-        """Appends a message to the text file."""
-        try:
-            with open(self.file_path, "a", encoding="utf-8") as file:
-                file.write(message + "\n")
-            print("Message written successfully.")
-        except IOError as e:
-            print(f"Error writing message: {e}")
+def load_auths_beta():
+    with open("auths.pkl", "rb") as f:
+        return pickle.load(f)
 
-    def read_messages(self):
-        """Reads all messages from the file."""
-        if not os.path.exists(self.file_path):
-            print("No messages found.")
-            return
+AUTHS = load_auths_beta()
 
-        with open(self.file_path, "r", encoding="utf-8") as file:
-            print("Messages:")
-            for line in file:
-                print(line.strip())
+@app.route("/")
+def index():
+    return "PythonMessagingTool server is up", 200
+
+@app.route("/msgwrite", methods=["GET"])
+def msgwrite():
+    try:
+        key = request.args.get("key")
+        msg = request.args.get("msg")
+        if key is None or msg is None:
+            return "Invalid user input: `key` or `msg` is missing", 400
+        if key not in AUTHS:
+            return "Invalid user auth", 401
+        sid, num_to, num_from = AUTHS[key]
+        client = Client(sid, key)
+        client.messages.create(
+            to=num_to,
+            from_=num_from,
+            body=msg
+        )
+        return "Message accepted", 200
+    except:
+        return "Error", 500
 
 if __name__ == "__main__":
-    writer = MessageWriter()
-
-    while True:
-        print("\nOptions:")
-        print("1. Send a message")
-        print("2. View messages")
-        print("3. Exit")
-        choice = input("Choose an option: ")
-
-        if choice == "1":
-            msg = input("Enter your message: ")
-            writer.send_message(msg)
-        elif choice == "2":
-            writer.read_messages()
-        elif choice == "3":
-            print("Exiting.")
-            break
-        else:
-            print("Invalid choice. Try again.")
+    app.run(debug=True)
